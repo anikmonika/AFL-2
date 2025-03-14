@@ -1,6 +1,5 @@
 const io = require("socket.io-client");
 const readline = require("readline");
-const crypto = require("crypto");
 
 const socket = io("http://localhost:3000");
 
@@ -14,13 +13,6 @@ let registeredUsername = "";
 let username = "";
 const users = new Map();
 
-// Generate RSA key pair for the client
-const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-  publicKeyEncoding: { type: "spki", format: "pem" },
-  privateKeyEncoding: { type: "pkcs8", format: "pem" },
-});
-
 socket.on("connect", () => {
   console.log("Connected to the server");
 
@@ -31,7 +23,7 @@ socket.on("connect", () => {
 
     socket.emit("registerPublicKey", {
       username,
-      publicKey,
+      publicKey: "public key",
     });
     rl.prompt();
 
@@ -44,13 +36,7 @@ socket.on("connect", () => {
           username = registeredUsername;
           console.log(`Now you are ${username}`);
         } else {
-          // Sign the message with the private key
-          const sign = crypto.createSign("SHA256");
-          sign.update(message);
-          sign.end();
-          const signature = sign.sign(privateKey, "hex");
-
-          socket.emit("message", { username, message, signature });
+          socket.emit("message", { username, message });
         }
       }
       rl.prompt();
@@ -67,32 +53,16 @@ socket.on("init", (keys) => {
 socket.on("newUser", (data) => {
   const { username, publicKey } = data;
   users.set(username, publicKey);
-  console.log(`${username} joined the chat`);
+  console.log(`${username} join the chat`);
   rl.prompt();
 });
 
 socket.on("message", (data) => {
-  const { username: senderUsername, message: senderMessage, signature } = data;
-
+  const { username: senderUsername, message: senderMessage } = data;
   if (senderUsername !== username) {
-    const senderPublicKey = users.get(senderUsername);
-
-    if (senderPublicKey && signature) {
-      const verify = crypto.createVerify("SHA256");
-      verify.update(senderMessage);
-      verify.end();
-      const isValid = verify.verify(senderPublicKey, signature, "hex");
-
-      if (isValid) {
-        console.log(`${senderUsername}: ${senderMessage}`);
-      } else {
-        console.log(`Warning! ${senderUsername} is impersonating! This user is fake.`);
-      }
-    } else {
-      console.log(`Warning! No valid signature or public key for ${senderUsername}. This user is fake.`);
-    }
+    console.log(`${senderUsername}: ${senderMessage}`);
+    rl.prompt();
   }
-  rl.prompt();
 });
 
 socket.on("disconnect", () => {
@@ -107,4 +77,3 @@ rl.on("SIGINT", () => {
   rl.close();
   process.exit(0);
 });
- 
